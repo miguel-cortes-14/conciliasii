@@ -12,7 +12,7 @@ Las 15 historias del PRD forman un ciclo completo, pero conviene liberar valor e
 Entregar en tres capas, cada una usable:
 
 1. **Capa 1 · Núcleo con descarga Excel:** período, carga del CSV del SII, libro del ERP por el puerto, filtro, cruce, clasificación (con diferencias de período, sugerencias y duplicados), resumen, detalle y descarga de Excel. HU-01 a HU-10 y HU-15. Solo existe el rol Tesorero.
-2. **Capa 2 · Comentarios y aprobación:** HU-11 y HU-14. Incorpora los roles Analista Contable, Jefa de Contabilidad y GAF y los permisos por rol (ver [ADR-0006](0006-roles-y-cadena-de-aprobacion.md)).
+2. **Capa 2 · Comentarios y aprobación:** HU-11 y HU-14. Incorpora los roles Analista Contable, Jefa de Contabilidad y GAF, los permisos por rol y el permiso de comentar del Tesorero (ver [ADR-0006](0006-roles-y-cadena-de-aprobacion.md)).
 3. **Capa 3 · Historial y versiones:** HU-12 y HU-13.
 
 La asignación completa por issue está en [arquitectura.md](../arquitectura.md#historias-por-capa). El orden de construcción es 1, 2, 3.

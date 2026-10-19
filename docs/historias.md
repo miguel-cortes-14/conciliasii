@@ -4,6 +4,8 @@
 
 15 historias en 5 grupos cubren todos los requisitos y reglas del PRD. Las que dependen de una decisión pendiente lo indican junto a su criterio.
 
+Roles de la app: Tesorero (Tesorería), Analista Contable (Contabilidad), Jefa de Contabilidad (1er aprobador) y GAF (2.º aprobador, superior jerárquico de la Jefa de Contabilidad), más el Administrador (TI). HU-01 y HU-15 se mantienen con su redacción genérica. HU-11 y HU-14 conservan su texto original hasta su revisión; deben alinearse con los comentarios del Tesorero y del Analista Contable y con la aprobación en dos niveles (RF-12, RN-11).
+
 ## Mapa de historias
 
 La prioridad MoSCoW está validada por el PO: las Must forman el MVP mínimo que reemplaza los 2 días de trabajo manual.
@@ -53,7 +55,7 @@ Escenario: Período ya conciliado
 
 ### HU-02 · Cargar el CSV del Registro de Compras
 
-**Como** analista de Tesorería, **quiero** subir el archivo que descargo del portal del SII, **para** no tener que transcribir los documentos.
+**Como** Tesorero, **quiero** subir el archivo que descargo del portal del SII, **para** no tener que transcribir los documentos.
 
 ```gherkin
 Escenario: Carga válida
@@ -90,7 +92,7 @@ Escenario: Reemplazar un archivo ya cargado
 
 ### HU-03 · Traer el libro de compras desde Business Central
 
-**Como** analista de Tesorería, **quiero** obtener el libro de compras del período directamente desde Business Central, **para** no exportarlo ni transformarlo a mano.
+**Como** Tesorero, **quiero** obtener el libro de compras del período directamente desde Business Central, **para** no exportarlo ni transformarlo a mano.
 
 ```gherkin
 Escenario: Extracción exitosa
@@ -117,7 +119,7 @@ Escenario: Documento sin datos de llave
 
 ### HU-04 · Filtrar el universo a conciliar
 
-**Como** analista de Tesorería, **quiero** que el sistema deje solo los documentos que entran en la conciliación, **para** no revisar documentos fuera de alcance.
+**Como** Tesorero, **quiero** que el sistema deje solo los documentos que entran en la conciliación, **para** no revisar documentos fuera de alcance.
 
 ```gherkin
 Escenario: Filtro por tipo y estado
@@ -137,7 +139,7 @@ Escenario: Informe de excluidos
 
 ### HU-05 · Cruzar y clasificar documentos
 
-**Como** analista de Tesorería, **quiero** que el sistema cruce ambos libros y clasifique cada documento, **para** dedicar mi tiempo solo a las excepciones.
+**Como** Tesorero, **quiero** que el sistema cruce ambos libros y clasifique cada documento, **para** dedicar mi tiempo solo a las excepciones.
 
 ```gherkin
 Escenario: Documento cuadrado
@@ -185,7 +187,7 @@ Escenario: Cada documento en una sola categoría
 
 ### HU-06 · Detectar diferencias de período
 
-**Como** analista de Tesorería, **quiero** saber si un documento faltante está registrado en otro período, **para** no tratar un desfase como un error.
+**Como** Tesorero, **quiero** saber si un documento faltante está registrado en otro período, **para** no tratar un desfase como un error.
 
 ```gherkin
 Escenario: Documento registrado en el período siguiente
@@ -212,7 +214,7 @@ Escenario: Fuera del rango de búsqueda
 
 ### HU-07 · Sugerir calces aproximados
 
-**Como** analista de Tesorería, **quiero** que el sistema me sugiera posibles pares cuando no hay calce exacto, **para** detectar errores de digitación en folio o tipo.
+**Como** Tesorero, **quiero** que el sistema me sugiera posibles pares cuando no hay calce exacto, **para** detectar errores de digitación en folio o tipo.
 
 ```gherkin
 Escenario: Sugerencia por RUT y monto
@@ -238,7 +240,7 @@ Escenario: Descartar una sugerencia
 
 ### HU-08 · Alertar documentos duplicados
 
-**Como** analista de Tesorería, **quiero** ver cuándo una misma llave aparece dos veces en una fuente, **para** detectar facturas registradas dos veces.
+**Como** Tesorero, **quiero** ver cuándo una misma llave aparece dos veces en una fuente, **para** detectar facturas registradas dos veces.
 
 ```gherkin
 Escenario: Duplicado en Business Central
@@ -252,7 +254,7 @@ Escenario: Duplicado en Business Central
 
 ### HU-09 · Ver el resumen por categoría
 
-**Como** analista de Tesorería o aprobador de Contabilidad, **quiero** ver un resumen por categoría, **para** entender de un vistazo cuánto cuadra y cuánto hay que revisar.
+**Como** Tesorero, Analista Contable, Jefa de Contabilidad o GAF, **quiero** ver un resumen por categoría, **para** entender de un vistazo cuánto cuadra y cuánto hay que revisar.
 
 ```gherkin
 Escenario: Resumen del período
@@ -270,7 +272,7 @@ Escenario: Avance de comentarios
 
 ### HU-10 · Ver el detalle de diferencias
 
-**Como** analista de Tesorería, **quiero** ver cada documento de una categoría con sus valores lado a lado, **para** encontrar la causa de la diferencia sin abrir otros sistemas.
+**Como** Tesorero o Analista Contable, **quiero** ver cada documento de una categoría con sus valores lado a lado, **para** encontrar la causa de la diferencia sin abrir otros sistemas.
 
 ```gherkin
 Escenario: Detalle de una diferencia de monto
@@ -311,7 +313,7 @@ Escenario: Los comentarios no se borran
 
 ### HU-12 · Volver a conciliar un período
 
-**Como** analista de Tesorería, **quiero** volver a ejecutar la conciliación después de corregir en Business Central, **para** confirmar que la corrección resolvió la diferencia.
+**Como** Tesorero, **quiero** volver a ejecutar la conciliación después de corregir en Business Central, **para** confirmar que la corrección resolvió la diferencia.
 
 ```gherkin
 Escenario: Nueva versión conserva comentarios
@@ -336,7 +338,7 @@ Escenario: Versiones anteriores
 
 ### HU-13 · Consultar conciliaciones anteriores
 
-**Como** aprobador de Contabilidad, **quiero** ver la lista de períodos conciliados, **para** revisar el historial ante una consulta o auditoría.
+**Como** Tesorero, Analista Contable, Jefa de Contabilidad o GAF, **quiero** ver la lista de períodos conciliados, **para** revisar el historial ante una consulta o auditoría.
 
 ```gherkin
 Escenario: Lista de períodos
