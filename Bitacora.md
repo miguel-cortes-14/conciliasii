@@ -25,3 +25,24 @@ Tiempo que habría tomado con un equipo tradicional (completar al terminar cada 
 - `claude` no se reconocía: la carpeta de instalación no estaba en el PATH de Windows. Se resolvió agregándola.
 - Al copiar comandos desde el PDF, las líneas se pegaron juntas y fallaron. Aprendizaje: ejecutar un comando por vez.
 - Claude Code exige un plan de pago o saldo en Console; no se puede usar con la cuenta gratis.
+
+   ---
+
+   ## 19-10-2026 | Fase 1: requisitos | Tiempo: 15:00 h
+
+   **Qué hice**
+   - Creé el Proyecto ConciliaSII en claude.ai y fui entrevistado por Claude como Business Analyst.
+   - Obtuve el PRD, las historias de usuario y 15 Issues en GitHub (#3 a #17), con avisos en Slack.
+
+   **Qué hizo la IA**
+   - Entrevista de requisitos, redacción del PRD y de las historias con criterios de aceptación, creación de los Issues y publicación de los documentos en el repo.
+
+   **Qué corregí / decidí yo**
+   - ERP: Business Central, simulado en la PoC por no tener acceso real.
+   - Alcance del MVP: DTE 33 y 34, solo "registrados"; cruce por RUT + tipo + folio.
+   - Flujo: Tesorería carga, Contabilidad aprueba dentro de la app con comentario obligatorio por diferencia.
+   - Validé la priorización MoSCoW.
+   - Errores de la IA que detecté: (completar)
+
+   **Aprendizajes**
+   - Entendimiento de uso de ramas, apoyado por Claude
