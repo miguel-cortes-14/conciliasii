@@ -2,9 +2,9 @@
 
 **Fecha:** 2026-10-16 · **Product Owner:** Miguel Cortés · Fuente: [PRD.md](PRD.md)
 
-15 historias en 5 grupos cubren todos los requisitos y reglas del PRD. Las que dependen de una decisión pendiente lo indican junto a su criterio.
+16 historias en 5 grupos cubren todos los requisitos y reglas del PRD. Las que dependen de una decisión pendiente lo indican junto a su criterio.
 
-Roles de la app: Tesorero (Tesorería), Analista Contable (Contabilidad), Jefa de Contabilidad (1er aprobador) y GAF (2.º aprobador, superior jerárquico de la Jefa de Contabilidad), más el Administrador (TI). HU-01 y HU-15 se mantienen con su redacción genérica. HU-11 y HU-14 conservan su texto original hasta su revisión; deben alinearse con los comentarios del Tesorero y del Analista Contable y con la aprobación en dos niveles (RF-12, RN-11).
+Roles de la app: Tesorero (Tesorería), Analista Contable (Contabilidad), Jefa de Contabilidad (1er aprobador) y Gerente de Administración y Finanzas (GAF) (2.º y último aprobador, superior jerárquico de la Jefa de Contabilidad), más el Administrador (TI). HU-01 y HU-15 se mantienen con su redacción genérica.
 
 ## Mapa de historias
 
@@ -25,8 +25,9 @@ La prioridad MoSCoW está validada por el PO: las Must forman el MVP mínimo que
 | HU-11 | Comentar un documento | 3 · Revisar | Must | RF-09 |
 | HU-12 | Volver a conciliar un período | 4 · Ciclo | Should | RF-10, RN-10 |
 | HU-13 | Consultar conciliaciones anteriores | 4 · Ciclo | Should | RF-11 |
-| HU-14 | Aprobar el período | 4 · Ciclo | Must | P1 |
+| HU-14 | Aprobar el período | 4 · Ciclo | Must | P1, RF-12, RN-11 |
 | HU-15 | Configurar la conexión con Business Central | Habilitador | Must | RF-03, P7 |
+| HU-16 | Exportar la conciliación a Excel | 3 · Revisar | Must | RF-13, P6 |
 
 ## Grupo 1 · Preparar la conciliación
 
@@ -289,24 +290,71 @@ Escenario: Filtrar dentro de una categoría
 
 ### HU-11 · Comentar un documento
 
-**Como** analista de Tesorería, **quiero** dejar un comentario en cada documento con diferencia, **para** que Contabilidad sepa la causa y la acción tomada.
+**Como** Tesorero, Analista Contable o Jefa de Contabilidad, **quiero** dejar un comentario en cada documento con diferencia, **para** que quien revisa y aprueba sepa la causa y la acción tomada.
 
 ```gherkin
 Escenario: Agregar un comentario
   Dado un documento en cualquier categoría distinta de "Cuadrado"
+  Y que tengo el rol de Tesorero, Analista Contable o Jefa de Contabilidad
   Cuando escribo un comentario y lo guardo
   Entonces el comentario queda asociado al documento
-  Y registra mi nombre, la fecha y la hora
+  Y registra mi nombre, mi rol, la fecha y la hora
 
 Escenario: Varios comentarios en un documento
   Dado un documento que ya tiene un comentario
   Cuando agrego otro
   Entonces veo ambos en orden cronológico
+  Y cada uno muestra el rol de quien lo escribió
 
 Escenario: Los comentarios no se borran
   Dado un comentario guardado
   Cuando intento eliminarlo
   Entonces la opción no está disponible
+
+Escenario: La Jefa de Contabilidad comenta mientras evalúa
+  Dado un período en espera de la Jefa de Contabilidad
+  Cuando ella escribe un comentario en un documento con diferencia
+  Entonces el comentario queda registrado con su nombre y su rol
+
+Escenario: El GAF no comenta
+  Dado que tengo el rol de GAF
+  Cuando abro un documento con diferencia
+  Entonces puedo leer sus comentarios
+  Y no veo la opción de comentar
+
+Escenario: Solo se comenta hasta la evaluación de la Jefa de Contabilidad
+  Dado un período en espera del GAF o ya aprobado
+  Cuando intento comentar un documento
+  Entonces la opción no está disponible
+```
+
+### HU-16 · Exportar la conciliación a Excel
+
+**Como** Tesorero, Analista Contable, Jefa de Contabilidad o GAF, **quiero** descargar la conciliación de un período en un archivo Excel, **para** revisarla, compartirla y conservarla fuera de la app.
+
+```gherkin
+Escenario: Descargar el Excel de un período conciliado
+  Dado un período conciliado
+  Cuando descargo el Excel
+  Entonces obtengo un archivo .xlsx de la versión vigente
+  Y una hoja "Resumen" muestra, por categoría, la cantidad de documentos y los montos según el SII y según Business Central
+  Y hay una hoja por categoría con el detalle de cada documento, sus valores del SII y de Business Central lado a lado y los campos distintos
+
+Escenario: El Excel incluye comentarios y estado de aprobación
+  Dado un período con comentarios y con un estado de aprobación
+  Cuando descargo el Excel
+  Entonces el detalle de cada documento incluye sus comentarios con autor, rol, fecha y hora
+  Y la hoja "Resumen" muestra el estado del período y quién aprobó y cuándo
+
+Escenario: Todos los roles de negocio pueden descargar
+  Dado que tengo el rol de Tesorero, Analista Contable, Jefa de Contabilidad o GAF
+  Cuando abro un período conciliado
+  Entonces veo la opción de descargar el Excel
+
+Escenario: Sin conciliación no hay descarga
+  Dado un período que aún no se concilia
+  Cuando abro la pantalla de revisión
+  Entonces la descarga está deshabilitada
 ```
 
 ## Grupo 4 · Ciclo del período
@@ -350,25 +398,55 @@ Escenario: Lista de períodos
 
 ### HU-14 · Aprobar el período
 
-> Decisión P1: la aprobación ocurre dentro de la app y exige comentario en todas las diferencias.
+> Decisión P1: la aprobación ocurre dentro de la app, en dos niveles, y exige comentario en todas las diferencias.
 
-**Como** aprobador de Contabilidad, **quiero** aprobar la conciliación de un período, **para** dejar constancia de que la revisé antes de declarar el F29.
+**Como** Jefa de Contabilidad (nivel 1) o GAF (nivel 2), **quiero** aprobar la conciliación de un período, **para** dejar constancia de que la revisamos antes de declarar el F29.
 
 ```gherkin
-Escenario: Aprobación con todas las diferencias comentadas
-  Dado un período donde todos los documentos fuera de "Cuadrado" tienen comentario
-  Cuando apruebo el período
-  Entonces el período queda en estado "Aprobado"
+Escenario: Aprobación de nivel 1 con todas las diferencias comentadas
+  Dado un período en espera de la Jefa de Contabilidad
+  Y todos los documentos fuera de "Cuadrado" tienen comentario
+  Cuando la Jefa de Contabilidad aprueba el nivel 1
+  Entonces el período pasa a espera del GAF
   Y se registra quién aprobó y cuándo
 
-Escenario: Diferencias sin comentario impiden aprobar
+Escenario: Diferencias sin comentario impiden aprobar el nivel 1
   Dado un período con documentos fuera de "Cuadrado" sin comentario
-  Cuando intento aprobarlo
+  Cuando la Jefa de Contabilidad intenta aprobar el nivel 1
   Entonces la aprobación se rechaza
   Y veo cuántos documentos faltan por comentar
 
-Escenario: Analista no puede aprobar
-  Dado que tengo el rol de analista de Tesorería
+Escenario: Aprobación final del GAF
+  Dado un período en espera del GAF
+  Cuando el GAF aprueba el nivel 2
+  Entonces el período queda en estado "Aprobado"
+  Y se registra quién aprobó y cuándo
+
+Escenario: El GAF rechaza y el período vuelve a la Jefa de Contabilidad
+  Dado un período en espera del GAF
+  Cuando el GAF rechaza e ingresa el motivo
+  Entonces el período vuelve a la Jefa de Contabilidad
+  Y ella ve el motivo del rechazo
+
+Escenario: La Jefa rechaza y el período vuelve al Analista Contable
+  Dado un período en espera de la Jefa de Contabilidad
+  Cuando ella rechaza e ingresa el motivo
+  Entonces el período vuelve al Analista Contable
+  Y él ve el motivo del rechazo
+
+Escenario: El Analista Contable devuelve el período a Tesorería
+  Dado un período en revisión contable
+  Cuando el Analista Contable lo devuelve e ingresa el motivo
+  Entonces el período vuelve a Tesorería en estado "Borrador"
+  Y el Tesorero ve el motivo de la devolución
+
+Escenario: Rechazos y devoluciones exigen motivo
+  Dado un período en revisión contable, en espera de la Jefa de Contabilidad o en espera del GAF
+  Cuando intento rechazarlo o devolverlo sin motivo
+  Entonces la acción no se registra
+
+Escenario: Tesorero y Analista Contable no aprueban
+  Dado que tengo el rol de Tesorero o de Analista Contable
   Cuando abro un período conciliado
   Entonces no veo la opción de aprobar
 
@@ -376,7 +454,14 @@ Escenario: Período aprobado no se modifica
   Dado un período aprobado
   Cuando intento volver a conciliarlo
   Entonces el sistema lo impide
-  Y me indica que Contabilidad debe reabrirlo
+  Y me indica que la Jefa de Contabilidad debe reabrirlo
+
+Escenario: La Jefa de Contabilidad reabre un período aprobado
+  Dado un período aprobado
+  Cuando la Jefa de Contabilidad lo reabre
+  Entonces se habilita una nueva versión del período
+  Y la versión aprobada se conserva sin cambios
+  Y la reapertura no requiere visto bueno del GAF
 ```
 
 ## Habilitador técnico
