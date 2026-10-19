@@ -65,7 +65,7 @@ Tiempo que habría tomado con un equipo tradicional (completar al terminar cada 
    - Entrega en tres capas: 1 núcleo con descarga Excel, 2 comentarios y aprobación, 3 historial y versiones.
    - Exportación a Excel con openpyxl desde la Capa 1 (el PRD la dejaba fuera de alcance, P6; falta actualizar el PRD).
    - Ruff como linter y formateador.
-   - Roles y responsables: Tesorero concilia, Analista contable revisa, comenta y da la primera aprobación, GAF da la aprobación final (ADR-0006, propuesto: es una interpretación por confirmar; el PRD y las historias aún usan Analista y Aprobador).
+   - Roles y responsables: cuatro usuarios confirmados (Tesorero, Analista Contable, Jefa de Contabilidad como 1er aprobador y GAF como 2.º aprobador final). El detalle de la cadena (quién comenta, destino de los rechazos, quién reabre) queda propuesto en el ADR-0006; el PRD y las historias aún usan Analista y Aprobador.
 
    **Aprendizajes**
    - Separar la lógica de Streamlit y poner el ERP detrás de un puerto permite cambiar el respaldo o el adaptador sin tocar el motor.
