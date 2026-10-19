@@ -17,7 +17,7 @@ Convenciones: los IDs `RF-xx` y `RN-xx` son los del PRD; `HU-xx` son las histori
 
 ```text
 conciliasii/
-├── app.py                          # entrada Streamlit: configuración de página, usuario/rol, navegación
+├── app.py                          # entrada Streamlit: configuración de página, usuario y rol activo, navegación
 ├── pages/
 │   ├── 1_Cargar_y_Conciliar.py     # período, carga CSV SII, traer libro ERP, ejecutar
 │   ├── 2_Revision.py               # resumen, detalle por categoría, sugerencias, comentarios, descarga Excel
@@ -40,7 +40,7 @@ conciliasii/
 │   ├── export/
 │   │   └── excel.py                # arma el libro Excel con openpyxl (devuelve bytes)
 │   ├── workflow/
-│   │   └── approval.py             # estados, comentarios obligatorios, aprobar/rechazar/reabrir
+│   │   └── approval.py             # estados, permisos por rol, comentarios obligatorios, aprobar/rechazar/reabrir
 │   └── storage/
 │       ├── schema.sql              # DDL de SQLite
 │       └── repository.py           # interfaz del repositorio + implementación SQLite
@@ -70,40 +70,128 @@ pytest
 
 La configuración de ruff vive en [`pyproject.toml`](../pyproject.toml) (línea de 100, `py311`). Ver [ADR-0004](adr/0004-ruff-lint-formato.md).
 
+## Roles y responsabilidades
+
+El flujo tiene tres roles de negocio en cadena: el **Tesorero** concilia, el **Analista contable** revisa, comenta y da la primera aprobación, y el **GAF** da la aprobación final. Cada acción de la app la ejecuta un solo rol; el [flujo](#flujo-completo) y la [máquina de estados](#flujo-de-aprobación) lo muestran paso a paso.
+
+**Supuesto a confirmar:** la cadena exacta Tesorero -> Analista contable -> GAF y que el Analista contable escribe los comentarios obligatorios es una interpretación del PO y no está confirmada. La nomenclatura difiere del PRD y de las historias; ver la [equivalencia](#equivalencia-con-los-roles-del-prd-y-las-historias) y [Supuestos y brechas](#supuestos-y-brechas-respecto-del-prd).
+
+| Rol | Área | Qué hace | Qué NO puede hacer | Estados en los que actúa |
+| --- | --- | --- | --- | --- |
+| Tesorero | Tesorería | Responsable de la conciliación: elige el período, carga el CSV del SII, trae el libro del ERP y ejecuta la conciliación, acepta o descarta sugerencias de calce, vuelve a conciliar tras corregir en BC, descarga el Excel y envía el período a revisión | Comentar diferencias, aprobar, rechazar ni reabrir | `Borrador` |
+| Analista contable | Contabilidad | Revisa las diferencias, escribe el comentario obligatorio de cada una, hace la primera aprobación (nivel 1) o rechaza con motivo devolviendo el período a Tesorería | Conciliar, cargar archivos, decidir sugerencias, dar la aprobación final ni reabrir | `EnRevisionContable` |
+| GAF (último aprobador) | Por confirmar | Aprobación final del período; tras ella la versión queda inmutable. Puede rechazar con motivo (vuelve a Tesorería) y reabrir un período aprobado | Conciliar, comentar ni dar la primera aprobación | `PendienteGAF` y `Aprobado` (reabrir) |
+| Administrador | TI | Configura la conexión con la API de Business Central (HU-15). Está en el PRD (sección "Usuarios y roles", con "supuesto") | No participa del flujo de conciliación ni de aprobación | Ninguno |
+
+El Administrador (TI) se mantiene porque el PRD lo define y HU-15 lo usa. En la PoC no tiene pantalla: la configuración del adaptador se lee de variables de entorno o `st.secrets` (ver [Configuración](#configuración)), de modo que el selector de rol de la app ofrece solo Tesorero, Analista contable y GAF.
+
+### Matriz de permisos por acción
+
+`Ejecuta` = puede hacerlo; `Consulta` = solo lectura; `-` = no puede. El estado indica cuándo se puede ejecutar. El servicio (`workflow/approval.py`) valida rol y estado en cada acción; la UI solo oculta o deshabilita lo que no corresponde.
+
+| Acción | Tesorero | Analista contable | GAF | Administrador (TI) | Estado requerido | Capa |
+| --- | --- | --- | --- | --- | --- | --- |
+| Seleccionar período y cargar el CSV del SII | Ejecuta | - | - | - | Sin versión vigente, o `Borrador` | 1 |
+| Conciliar (traer libro del ERP y cruzar) | Ejecuta | - | - | - | Sin versión vigente, o `Borrador` | 1 |
+| Aceptar o descartar sugerencia de calce | Ejecuta | - | - | - | `Borrador` | 1 |
+| Ver resumen y detalle | Consulta | Consulta | Consulta | - | Cualquiera | 1 |
+| Descargar Excel | Ejecuta | Ejecuta | Ejecuta | - | Cualquiera | 1 |
+| Comentar una diferencia | - | Ejecuta | - | - | `EnRevisionContable` | 2 |
+| Enviar a revisión | Ejecuta | - | - | - | `Borrador` | 2 |
+| Aprobar nivel 1 | - | Ejecuta | - | - | `EnRevisionContable` | 2 |
+| Aprobar final | - | - | Ejecuta | - | `PendienteGAF` | 2 |
+| Rechazar (con motivo) | - | Ejecuta | Ejecuta | - | `EnRevisionContable` (Analista contable) o `PendienteGAF` (GAF) | 2 |
+| Reabrir un período aprobado | - | - | Ejecuta | - | `Aprobado` | 2 |
+| Volver a conciliar (nueva versión) | Ejecuta | - | - | - | `Borrador`, o `Aprobado` tras reabrir | 3 |
+| Ver historial y versiones | Consulta | Consulta | Consulta | - | Cualquiera | 3 |
+| Configurar la conexión con BC | - | - | - | Ejecuta | No aplica | 1 (variables de entorno y stub) |
+
+Los permisos por rol se entregan por capa: en la **Capa 1** solo existe el Tesorero (el selector ofrece ese rol; no hay flujo de aprobación todavía); en la **Capa 2** se agregan el Analista contable y el GAF junto con `workflow/approval.py`, la tabla de permisos y los errores de rol; en la **Capa 3** los tres roles consultan el historial.
+
+### Equivalencia con los roles del PRD y las historias
+
+El PRD (sección "Usuarios y roles") y las historias usan otra nomenclatura. No se modificaron `PRD.md` ni `historias.md`; esta es la equivalencia que usa el diseño:
+
+| En el PRD y las historias | En este diseño |
+| --- | --- |
+| Analista de conciliación (Tesorería) / "analista de Tesorería" | Tesorero |
+| Aprobador (Contabilidad) / "aprobador de Contabilidad" | Analista contable (primera aprobación) y GAF (aprobación final) |
+| Administrador (TI) | Administrador (TI), sin cambios |
+
+Casos puntuales: HU-11 (Comentar un documento) dice "analista de Tesorería" y aquí lo hace el Analista contable; HU-09, HU-13 y HU-14 dicen "aprobador de Contabilidad" y aquí intervienen el Analista contable y el GAF (HU-14 se cumple en dos niveles); el escenario "Analista no puede aprobar" de HU-14 equivale a "el Tesorero no puede aprobar"; HU-12 (volver a conciliar) la ejecuta el Tesorero.
+
 ## Flujo completo
+
+Cada carril indica quién ejecuta el paso. "Sistema" agrupa lo que hace la app sin intervención de una persona.
 
 ```mermaid
 flowchart TD
-  A["Analista elige el período (RF-01)"] --> B[Sube el CSV del SII]
-  B --> C["ingest/sii_csv: leer y validar<br/>columnas, RUT y período (RF-02)"]
-  C -->|archivo inválido| E1[Mensaje de error y rechazo]
-  C -->|válido| D["Filtrar universo SII<br/>tipos 33 y 34, estado Registro (RF-04)"]
-  A --> P["ErpLedgerPort.get_purchase_ledger(período)<br/>más períodos vecinos (RF-03)"]
-  P -->|ERP no responde| E2[Error y reintento sin perder el CSV]
-  P --> F["Filtrar universo ERP<br/>tipos 33 y 34 y documentos sin llave"]
-  D --> M["engine/matcher: cruce por RUT + tipo + folio (RN-03)"]
+  subgraph TES["Tesorero (Tesorería)"]
+    A["Elige el período (RF-01)"]
+    B[Sube el CSV del SII]
+    S2["Confirma o descarta sugerencias (RF-08)"]
+    X["Descarga el Excel"]
+    ENV[Envía el período a revisión]
+    COR["Corrige en BC y vuelve a conciliar (RF-10)"]
+  end
+  subgraph SIS[Sistema]
+    C["ingest/sii_csv: leer y validar<br/>columnas, RUT y período (RF-02)"]
+    E1[Mensaje de error y rechazo del archivo]
+    D["Filtrar universo SII<br/>tipos 33 y 34, estado Registro (RF-04)"]
+    P["ErpLedgerPort.get_purchase_ledger(período)<br/>más períodos vecinos (RF-03)"]
+    E2[Error y reintento sin perder el CSV]
+    F["Filtrar universo ERP<br/>tipos 33 y 34 y documentos sin llave"]
+    M["engine/matcher: cruce por RUT + tipo + folio (RN-03)"]
+    S["Genera sugerencias de calce aproximado"]
+    K["engine/classifier: una categoría por documento (RN-05)"]
+    R[("storage/repository<br/>periodo, ejecucion, resultado")]
+    V["Resumen y detalle (RF-06, RF-07)<br/>visibles para los tres roles"]
+    VAL{"Valida que toda diferencia<br/>tenga comentario"}
+    H["Historial y versiones (RF-11)<br/>consultan los tres roles"]
+  end
+  subgraph ANA["Analista contable (Contabilidad)"]
+    REV[Revisa las diferencias]
+    COM["Escribe el comentario de cada diferencia (RF-09)"]
+    AP1[Solicita la aprobación nivel 1]
+    RJ1[Rechaza con motivo]
+  end
+  subgraph GAF["GAF (último aprobador)"]
+    G{"Decide la aprobación final"}
+    RJ2[Rechaza con motivo]
+    OK["Aprobado: versión inmutable"]
+    REA[Reabre el período aprobado]
+  end
+  A --> B --> C
+  C -->|archivo inválido| E1
+  C -->|válido| D
+  A --> P
+  P -->|ERP no responde| E2
+  P --> F
+  D --> M
   F --> M
-  M --> S["Sugerencias de calce aproximado (RF-08)<br/>el usuario confirma o descarta"]
-  M --> K["engine/classifier: una categoría por documento (RN-05)"]
-  S --> K
-  K --> R[("storage/repository<br/>periodo, ejecucion, resultado")]
-  R --> V["Revisión: resumen y detalle (RF-06, RF-07)"]
-  V --> X["export/excel: descarga con st.download_button"]
-  V --> C2["Comentarios por documento (RF-09)"]
-  C2 --> AP{"Aprobación: toda diferencia<br/>tiene comentario?"}
-  AP -->|no| C2
-  AP -->|sí| OK["Período Aprobado"]
-  OK --> H["Historial y versiones (RF-10, RF-11)"]
-  V -. corrección en BC, nueva versión .-> P
+  M --> S --> S2
+  M --> K
+  S2 --> K
+  K --> R --> V
+  V --> X
+  V --> ENV --> REV --> COM --> AP1 --> VAL
+  VAL -->|faltan comentarios| COM
+  VAL -->|completo, pasa a PendienteGAF| G
+  G -->|aprueba| OK --> H
+  G -->|rechaza| RJ2 --> COR
+  RJ1 --> COR
+  REV --> RJ1
+  OK --> REA --> COR
+  COR --> P
   classDef c1 fill:#e8f1ff,stroke:#3b6fd4;
   classDef c2 fill:#fff1e0,stroke:#d4893b;
   classDef c3 fill:#e6f6e8,stroke:#3b9a4a;
-  class A,B,C,D,P,F,M,S,K,R,V,X,E1,E2 c1;
-  class C2,AP,OK c2;
-  class H c3;
+  class A,B,S2,X,C,E1,D,P,E2,F,M,S,K,R,V c1;
+  class ENV,REV,COM,AP1,RJ1,VAL,G,RJ2,OK,REA c2;
+  class COR,H c3;
 ```
 
-Colores: azul = Capa 1, naranja = Capa 2, verde = Capa 3. La flecha punteada corresponde al ciclo del PRD: si Tesorería corrige en Business Central, vuelve a traer el libro y a cruzar (RF-10).
+Colores: azul = Capa 1, naranja = Capa 2, verde = Capa 3. El ciclo de corrección (RF-10) lo hace siempre el Tesorero: si el Analista contable o el GAF rechazan, o si el GAF reabre un período aprobado, el período vuelve a Tesorería, que corrige en Business Central, trae el libro de nuevo y cruza una versión nueva. La validación del comentario obligatorio ocurre en la aprobación de nivel 1 del Analista contable (ver [Flujo de aprobación](#flujo-de-aprobación)).
 
 ## Contratos de entrada
 
@@ -266,6 +354,7 @@ erDiagram
     text llave
     int ejecucion_id
     text autor
+    text rol
     text creado_en
     text texto
   }
@@ -274,6 +363,8 @@ erDiagram
     int ejecucion_id FK
     text decision
     text usuario
+    text rol
+    int nivel
     text decidido_en
     text motivo
   }
@@ -291,13 +382,13 @@ erDiagram
 | Tabla | Notas |
 | --- | --- |
 | `periodo` | Único por `(rut_empresa, anio, mes)`. Una empresa en el MVP. |
-| `ejecucion` | Una fila por versión (`version` 1, 2, 3...) de un período (RN-10). `estado` toma `Borrador`, `EnRevision` o `Aprobado`. Guarda el nombre del CSV, la fecha de extracción del ERP, los parámetros usados (tolerancia, campo de período, vecinos), el resumen y los conteos de excluidos y de "Sin llave". La versión vigente es la de mayor `version`. |
+| `ejecucion` | Una fila por versión (`version` 1, 2, 3...) de un período (RN-10). `estado` toma `Borrador`, `EnRevisionContable`, `PendienteGAF` o `Aprobado`. Guarda el nombre del CSV, la fecha de extracción del ERP, los parámetros usados (tolerancia, campo de período, vecinos), el resumen y los conteos de excluidos y de "Sin llave". La versión vigente es la de mayor `version`. |
 | `resultado` | Un documento clasificado en una versión: exactamente una `categoria` (RF-05), `alerta_duplicado`, valores SII y ERP y campos distintos. `UNIQUE(ejecucion_id, llave)`. |
-| `comentario` | Solo se inserta, nunca se actualiza ni se borra (RF-09). Se asocia al `periodo_id` y la `llave`, no a una versión: así se conservan al volver a conciliar (RF-10, RN-10). `ejecucion_id` registra en qué versión se escribió; una versión N solo muestra comentarios de versiones menores o iguales a N, por lo que una versión aprobada no cambia. |
-| `aprobacion` | Registro de decisiones sobre una versión: `Aprobado`, `Rechazado` (con `motivo` obligatorio) o `Reabierto`, con usuario y fecha y hora (HU-14). No es una pista de auditoría completa (fuera de alcance, P6). |
+| `comentario` | Solo se inserta, nunca se actualiza ni se borra (RF-09). `autor` y `rol` registran quién comentó (hoy solo el Analista contable; la columna `rol` permite habilitar a otros roles sin cambiar el esquema). Se asocia al `periodo_id` y la `llave`, no a una versión: así se conservan al volver a conciliar (RF-10, RN-10). `ejecucion_id` registra en qué versión se escribió; una versión N solo muestra comentarios de versiones menores o iguales a N, por lo que una versión aprobada no cambia. |
+| `aprobacion` | Registro de decisiones sobre una versión: `AprobadoNivel1` (`nivel` 1, Analista contable), `AprobadoFinal` (`nivel` 2, GAF), `Rechazado` (con `motivo` obligatorio; `nivel` indica quién rechazó) o `Reabierto` (GAF), con `usuario`, `rol` y fecha y hora (HU-14). No es una pista de auditoría completa (fuera de alcance, P6). |
 | `sugerencia` | Par `(llave_sii, llave_erp)` con estado `Pendiente`, `Confirmada` o `Descartada`, y quién y cuándo decidió (HU-07). Pertenece al período, de modo que un descarte persiste entre versiones. |
 
-El nombre del analista y el rol se obtienen de un selector en la barra lateral (**Supuesto**: sin autenticación real en la PoC; el PRD marca la gestión de usuarios como supuesto del Administrador).
+El nombre del usuario y su rol (Tesorero, Analista contable o GAF) se obtienen de un selector en la barra lateral (**Supuesto**: sin autenticación real en la PoC; el PRD marca la gestión de usuarios como supuesto del Administrador). En la Capa 1 el selector solo ofrece Tesorero.
 
 ### Interfaz del repositorio
 
@@ -316,12 +407,18 @@ class ConciliacionRepository(Protocol):
     def listar_sugerencias(self, periodo_id: int) -> list[Sugerencia]: ...
     # Capa 2
     def agregar_comentario(
-        self, periodo_id: int, llave: str, ejecucion_id: int, autor: str, texto: str
+        self, periodo_id: int, llave: str, ejecucion_id: int, autor: str, rol: Rol, texto: str
     ) -> Comentario: ...
     def listar_comentarios(self, periodo_id: int, hasta_version: int) -> list[Comentario]: ...
     def cambiar_estado(self, ejecucion_id: int, estado: Estado) -> None: ...
     def registrar_decision(
-        self, ejecucion_id: int, decision: Decision, usuario: str, motivo: str | None
+        self,
+        ejecucion_id: int,
+        decision: Decision,
+        usuario: str,
+        rol: Rol,
+        nivel: int | None,
+        motivo: str | None,
     ) -> None: ...
     # Capa 3
     def listar_periodos(self) -> list[ResumenPeriodo]: ...
@@ -332,33 +429,42 @@ Las firmas son una propuesta; lo que se fija es la frontera (nada fuera de `stor
 
 ## Flujo de aprobación
 
-Los estados viven en `ejecucion.estado` y las transiciones en `workflow/approval.py`.
+Los estados viven en `ejecucion.estado` y las transiciones en `workflow/approval.py`. Cada transición la dispara un rol concreto (ver la [matriz de permisos](#matriz-de-permisos-por-acción)).
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Borrador : conciliar (nueva versión)
-  Borrador --> EnRevision : Analista envía a revisión
-  EnRevision --> Aprobado : Aprobador aprueba (todas las diferencias comentadas)
-  EnRevision --> Borrador : Aprobador rechaza (motivo obligatorio)
+  [*] --> Borrador : Tesorero concilia (nueva versión)
+  Borrador --> EnRevisionContable : Tesorero envía a revisión
+  EnRevisionContable --> PendienteGAF : Analista contable aprueba nivel 1 (valida comentarios)
+  EnRevisionContable --> Borrador : Analista contable rechaza (motivo obligatorio)
+  PendienteGAF --> Aprobado : GAF aprueba final
+  PendienteGAF --> Borrador : GAF rechaza (motivo obligatorio)
   Aprobado --> [*]
+  note right of Aprobado
+    GAF puede reabrir. La versión aprobada queda intacta
+    y el Tesorero concilia una versión nueva en Borrador.
+  end note
 ```
 
 Reglas (P1, HU-14):
 
-- **Quién puede qué.** El Analista (Tesorería) concilia, comenta y envía a revisión; solo el Aprobador (Contabilidad) aprueba, rechaza o reabre. Un Analista no ve la opción de aprobar.
-- **Comentario obligatorio por diferencia.** `approve()` solo procede si todo `resultado` cuya categoría no es Cuadrado tiene al menos un comentario no vacío (tras `strip()`) para su llave. Si no, lanza `ComentariosFaltantesError` con la lista de documentos pendientes y la cantidad que falta (HU-14, métrica "diferencias sin comentario al cierre = 0" del PRD).
-- **Doble barrera.** La UI deshabilita el botón "Aprobar" mientras haya pendientes, y el servicio vuelve a validar al ejecutar: la regla no depende de la interfaz.
-- **Rechazo.** Exige un motivo (texto no vacío) y devuelve la versión a `Borrador`; el motivo queda en `aprobacion`.
-- **Inmutabilidad.** Una versión `Aprobado` no admite nuevos comentarios, cambios de sugerencias ni modificaciones de resultados; el servicio lanza `TransicionInvalidaError`. Una corrección es una **versión nueva**.
-- **Reabrir (Supuesto).** HU-14 dice que "Contabilidad debe reabrirlo" pero el PRD no define el mecanismo. Se modela como una decisión `Reabierto` del Aprobador sobre la versión aprobada, que habilita crear una versión nueva en `Borrador`; la versión aprobada queda intacta.
-- **Reconciliar.** Un período con versión vigente `Aprobado` (y sin `Reabierto` posterior) no se puede volver a conciliar.
+- **Quién puede qué.** El Tesorero concilia, decide las sugerencias de calce y envía a revisión (`Borrador` a `EnRevisionContable`). El Analista contable comenta, aprueba el nivel 1 (`EnRevisionContable` a `PendienteGAF`) o rechaza. El GAF aprueba el nivel final (`PendienteGAF` a `Aprobado`), rechaza o reabre. Ver [Roles y responsabilidades](#roles-y-responsabilidades).
+- **Comentario obligatorio por diferencia: se valida en la aprobación de nivel 1.** El PRD condiciona la aprobación a los comentarios: P1 (`PRD.md`, línea 120: Contabilidad "no puede aprobar si quedan diferencias sin comentario") y la métrica "Diferencias sin comentario al cierre = 0" (línea 111). Como el Analista contable representa a Contabilidad y es quien escribe los comentarios, `aprobar_nivel1()` solo procede si todo `resultado` cuya categoría no es Cuadrado tiene al menos un comentario no vacío (tras `strip()`) para su llave. Si no, lanza `ComentariosFaltantesError` con la lista de documentos pendientes y la cantidad que falta (HU-14). El GAF recibe el período ya comentado.
+- **Doble barrera.** La UI deshabilita "Aprobar nivel 1" mientras haya pendientes, y el servicio vuelve a validar al ejecutar. Por seguridad, `aprobar_final()` repite la validación (los comentarios no se pueden borrar, así que en la práctica no falla). La regla no depende de la interfaz.
+- **Permisos por rol.** El servicio recibe el rol del actor y consulta la tabla de permisos; si el rol no corresponde lanza `RolNoAutorizadoError`, y si el estado no corresponde, `TransicionInvalidaError`. Un Tesorero no ve la opción de aprobar.
+- **Rechazo.** Lo hace el Analista contable (desde `EnRevisionContable`) o el GAF (desde `PendienteGAF`). Exige un motivo (texto no vacío) y devuelve la versión a `Borrador`, es decir, a Tesorería; el motivo, el rol y el nivel quedan en `aprobacion`.
+- **Inmutabilidad.** Una versión `Aprobado` no admite nuevos comentarios, cambios de sugerencias ni modificaciones de resultados; el servicio lanza `TransicionInvalidaError`. Una corrección es una **versión nueva**. Los comentarios solo se escriben en `EnRevisionContable`.
+- **Reabrir (Supuesto).** HU-14 dice que "Contabilidad debe reabrirlo" pero el PRD no define el mecanismo ni quién. Se modela como una decisión `Reabierto` del GAF sobre la versión aprobada, que habilita al Tesorero a crear una versión nueva en `Borrador`; la versión aprobada queda intacta.
+- **Reconciliar.** Un período con versión vigente `Aprobado` (y sin `Reabierto` posterior) no se puede volver a conciliar. Mientras la versión está en `EnRevisionContable` o `PendienteGAF` tampoco: primero debe rechazarse.
+
+Errores del módulo (`domain/errors.py`): `ComentariosFaltantesError`, `RolNoAutorizadoError`, `TransicionInvalidaError`, `MotivoRequeridoError`.
 
 ## Capas de entrega
 
 Cada capa deja la app usable y se puede liberar por separado. Detalle y alternativas en [ADR-0005](adr/0005-entrega-en-tres-capas.md).
 
 - **Capa 1 · Núcleo con descarga Excel.** Cargar el CSV del SII, traer el libro del ERP por el puerto, filtrar, cruzar, clasificar, sugerir calces, ver resumen y detalle, y descargar el Excel.
-- **Capa 2 · Comentarios y aprobación.** Comentarios por documento y aprobación del período con comentario obligatorio por diferencia.
+- **Capa 2 · Comentarios y aprobación.** Comentarios por documento (Analista contable) y aprobación del período en dos niveles (Analista contable y GAF) con comentario obligatorio por diferencia. Agrega los roles Analista contable y GAF; la Capa 1 solo conoce al Tesorero.
 - **Capa 3 · Historial y versiones.** Lista de períodos, versiones, volver a conciliar conservando comentarios y vista de versiones anteriores en solo lectura.
 
 ### Historias por capa
@@ -377,10 +483,10 @@ Cada historia está en exactamente una capa. Los issues #3 a #17 corresponden a 
 | [#10](https://github.com/miguel-cortes-14/conciliasii/issues/10) | HU-08 | Alertar documentos duplicados | Could | 1 | Se detecta al armar el cruce (RN-09); costo marginal bajo | HU-05 |
 | [#11](https://github.com/miguel-cortes-14/conciliasii/issues/11) | HU-09 | Ver el resumen por categoría | Must | 1 | Primera vista de resultados y base de la hoja `Resumen` del Excel | HU-05; el escenario "avance de comentarios" se activa en la Capa 2 |
 | [#12](https://github.com/miguel-cortes-14/conciliasii/issues/12) | HU-10 | Ver el detalle de diferencias | Must | 1 | Permite investigar la causa, valores lado a lado | HU-05; el filtro "sin comentario" se activa en la Capa 2 |
-| [#13](https://github.com/miguel-cortes-14/conciliasii/issues/13) | HU-11 | Comentar un documento | Must | 2 | Es el primer paso del flujo con Contabilidad; requiere tabla `comentario` y usuario | HU-10 |
+| [#13](https://github.com/miguel-cortes-14/conciliasii/issues/13) | HU-11 | Comentar un documento | Must | 2 | Primer paso de la revisión contable: lo escribe el Analista contable (el PRD y la historia dicen "analista de Tesorería", ver equivalencia); requiere tabla `comentario`, usuario y rol | HU-10 |
 | [#14](https://github.com/miguel-cortes-14/conciliasii/issues/14) | HU-12 | Volver a conciliar un período | Should | 3 | Gestión de versiones y traspaso de comentarios por llave (RN-10); presupone comentarios (Capa 2) | HU-05, HU-11; `ejecucion.version` |
 | [#15](https://github.com/miguel-cortes-14/conciliasii/issues/15) | HU-13 | Consultar conciliaciones anteriores | Should | 3 | Historial por período (RF-11), solo consulta | HU-01, HU-12, HU-14 (estado en la lista) |
-| [#16](https://github.com/miguel-cortes-14/conciliasii/issues/16) | HU-14 | Aprobar el período | Must | 2 | Cierra el ciclo con comentario obligatorio (P1); depende de los comentarios | HU-11; P1 resuelta |
+| [#16](https://github.com/miguel-cortes-14/conciliasii/issues/16) | HU-14 | Aprobar el período | Must | 2 | Cierra el ciclo con comentario obligatorio (P1) en dos niveles: Analista contable (valida comentarios) y GAF (final); depende de los comentarios | HU-11; P1 resuelta |
 | [#17](https://github.com/miguel-cortes-14/conciliasii/issues/17) | HU-15 | Configurar la conexión con Business Central | Must | 1 | Habilitador del adaptador del ERP: en la PoC se materializa como `config.py` más el stub `bc_api_adapter`; la conexión real vive detrás del puerto | HU-03; **P7** |
 
 Recuento: 15 historias, 15 filas. Capa 1 = HU-01, 02, 03, 04, 05, 06, 07, 08, 09, 10 y 15 (11 historias); Capa 2 = HU-11 y HU-14 (2); Capa 3 = HU-12 y HU-13 (2). Total 15.
@@ -396,12 +502,12 @@ Notas de asignación:
 | Capa | Módulos y archivos que se entregan |
 | --- | --- |
 | 1 | `app.py`; `pages/1_Cargar_y_Conciliar.py`; `pages/2_Revision.py` (resumen, detalle, sugerencias, descarga); `src/conciliasii/config.py`; `domain/models.py` y `domain/errors.py`; `ingest/sii_csv.py`; `erp/port.py`, `erp/csv_adapter.py`, `erp/bc_api_adapter.py` (stub); `engine/matcher.py`, `engine/classifier.py`; `export/excel.py` (hojas `Resumen`, categorías y `Sugerencias`); `storage/schema.sql` y `storage/repository.py` (`periodo`, `ejecucion`, `resultado`, `sugerencia`); `data/samples/`; `tests/`; `requirements.txt`, `requirements-dev.txt`, `pyproject.toml` |
-| 2 | `workflow/approval.py`; `pages/3_Aprobacion.py`; panel de comentarios en `pages/2_Revision.py`; tablas `comentario` y `aprobacion` en `schema.sql` y sus métodos en el repositorio; hoja `Comentarios` y columna de comentarios en `export/excel.py`; selector de rol activo |
+| 2 | `workflow/approval.py`; `pages/3_Aprobacion.py`; panel de comentarios en `pages/2_Revision.py`; tablas `comentario` y `aprobacion` en `schema.sql` y sus métodos en el repositorio; hoja `Comentarios` y columna de comentarios en `export/excel.py`; selector de rol con Analista contable y GAF, permisos por rol (`Rol`, `RolNoAutorizadoError`) y estados `EnRevisionContable` y `PendienteGAF` |
 | 3 | `pages/4_Historial.py`; en el servicio de conciliación, traspaso de comentarios por llave entre versiones y vista de versiones anteriores en solo lectura (`listar_periodos`, `listar_ejecuciones`); acción "volver a conciliar" con versión nueva |
 
 ### Coherencia con el MVP del PRD
 
-El conjunto Must del PRD son las historias HU-01 a HU-05, HU-09, HU-10, HU-11, HU-14 y HU-15. Con esta asignación, todas caen en las Capas 1 y 2 y ninguna Must queda en la Capa 3. Pero la Capa 1 por sí sola no cumple el MVP mínimo: faltan HU-11 y HU-14 (Capa 2), que son las que reemplazan el cierre con Contabilidad. El MVP completo del PRD es Capa 1 + Capa 2; la Capa 3 contiene solo historias Should (HU-12, HU-13). Además la Capa 1 adelanta tres historias no Must (HU-06 Should; HU-07 y HU-08 Could) porque forman parte del motor de cruce, y la descarga de Excel, que el PRD deja fuera de alcance (P6).
+El conjunto Must del PRD son las historias HU-01 a HU-05, HU-09, HU-10, HU-11, HU-14 y HU-15. Con esta asignación, todas caen en las Capas 1 y 2 y ninguna Must queda en la Capa 3. Pero la Capa 1 por sí sola no cumple el MVP mínimo: faltan HU-11 y HU-14 (Capa 2), que son las que reemplazan el cierre con Contabilidad y el GAF. El MVP completo del PRD es Capa 1 + Capa 2; la Capa 3 contiene solo historias Should (HU-12, HU-13). Además la Capa 1 adelanta tres historias no Must (HU-06 Should; HU-07 y HU-08 Could) porque forman parte del motor de cruce, y la descarga de Excel, que el PRD deja fuera de alcance (P6).
 
 ## Limitaciones conocidas
 
@@ -409,7 +515,7 @@ El conjunto Must del PRD son las historias HU-01 a HU-05, HU-09, HU-10, HU-11, H
 - **Mitigaciones:** la descarga de Excel (ver arriba) permite llevarse el resultado; los CSV de ejemplo en `data/samples/` permiten recargar los datos de la demo; el repositorio es la única frontera de acceso a datos.
 - **Mejora futura:** migrar a una base externa administrada (por ejemplo Postgres administrado o Supabase) implementando otro `ConciliacionRepository` y cambiando `STORAGE_BACKEND`, sin tocar motor, flujo ni páginas.
 - El libro de BC es simulado con CSV; la integración real depende de P7.
-- Sin autenticación real: el usuario y el rol se eligen en la barra lateral. No apto para datos reales.
+- Sin autenticación real: el usuario y el rol (Tesorero, Analista contable, GAF) se eligen en la barra lateral, de modo que cualquiera puede asumir cualquier rol. No apto para datos reales.
 - Una sola empresa y un solo ambiente de BC, como en el alcance del MVP.
 
 ## Verificación contra el PRD
@@ -444,6 +550,11 @@ Diferencias encontradas: ninguna en las categorías. Las brechas del PRD que sí
 | P3 | `AMOUNT_TOLERANCE = 0` | Respuesta del PO |
 | P4 | `NEIGHBOR_PERIODS = 2,1` (propuesta del PRD), búsqueda del SII hacia BC | Respuesta del PO |
 | P7 | Si falta tipo o folio en la API estándar, se derivan de `External Document No.` dentro de `erp/` | Exploración de la API |
-| Usuarios y roles | Selector en la barra lateral, sin autenticación | Fuera de la PoC |
-| Reabrir un período | Decisión `Reabierto` del Aprobador que habilita una versión nueva | Confirmar con Contabilidad |
+| Cadena de roles (**a confirmar**) | Tesorero concilia, Analista contable revisa y da la primera aprobación, GAF da la aprobación final. Es una interpretación del PO no confirmada; el PRD define una sola aprobación de Contabilidad (P1) | Confirmar con el PO; ver [ADR-0006](adr/0006-roles-y-cadena-de-aprobacion.md) |
+| Quién comenta (**a confirmar**) | Solo el Analista contable escribe los comentarios obligatorios. El PRD (`PRD.md`, línea 21) y HU-11 dicen que comenta Tesorería | Confirmar; `comentario.rol` permite habilitar también al Tesorero |
+| Dónde se valida el comentario | En la aprobación de nivel 1 (Analista contable), re-validado en la final | Confirmar junto con la cadena |
+| Nomenclatura de roles | PRD e historias usan Analista de conciliación / Aprobador; el diseño usa Tesorero / Analista contable / GAF. `PRD.md`, `historias.md` y los issues no se modificaron | Actualizar PRD, historias e issues si se valida |
+| Área del GAF | No definida; se muestra como "por confirmar" | Respuesta del PO |
+| Usuarios y roles en la app | Selector en la barra lateral, sin autenticación | Fuera de la PoC |
+| Reabrir un período | Decisión `Reabierto` del GAF que habilita al Tesorero a crear una versión nueva (HU-14 dice "Contabilidad") | Confirmar con el PO |
 | Tabla `sugerencia` | Se agrega a las cinco tablas base | Revisar al implementar HU-07 |
