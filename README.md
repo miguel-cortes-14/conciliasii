@@ -6,6 +6,13 @@
 
 Stack: Python + Streamlit
 
+## Documentación
+
+- [PRD](docs/PRD.md): problema, alcance, requisitos y reglas de negocio.
+- [Historias de usuario](docs/historias.md): 15 historias con criterios de aceptación.
+- [Arquitectura](docs/arquitectura.md): diseño, flujo, modelo de datos y capas de entrega.
+- [ADRs](docs/adr/README.md): decisiones de arquitectura.
+
 ## Cómo contribuir
 
 ¿Quieres aportar a ConciliaSII? ¡Bienvenido/a! Al estar en construcción, toda ayuda suma. Sigue estos pasos:
