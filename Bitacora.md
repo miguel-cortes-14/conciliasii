@@ -46,3 +46,32 @@ Tiempo que habría tomado con un equipo tradicional (completar al terminar cada 
 
    **Aprendizajes**
    - Entendimiento de uso de ramas, apoyado por Claude
+
+   ---
+
+   ## 19-10-2026 | Fase 2: diseño | Tiempo: 15:00 h
+
+   **Qué hice**
+   - Pedí el diseño de la arquitectura a partir del PRD, las historias y los Issues #3 a #17.
+   - Revisé y pedí ajustes al diseño base.
+
+   **Qué hizo la IA**
+   - Redactó `docs/arquitectura.md` (carpetas, contratos de los CSV, modelo de datos, flujo de aprobación, diagramas Mermaid y capas de entrega) y cinco ADR en `docs/adr/`.
+   - Creó la configuración mínima: `requirements.txt`, `requirements-dev.txt` y `pyproject.toml` (ruff).
+   - Verificó las cinco categorías contra el PRD (RN-05): coinciden en nombres, cantidad y definiciones.
+
+   **Qué corregí / decidí yo**
+   - SQLite local es una decisión consciente: la demo en Streamlit Community Cloud es efímera por diseño y la base externa queda como mejora futura; todo el acceso a datos va detrás de `repository.py`.
+   - Entrega en tres capas: 1 núcleo con descarga Excel, 2 comentarios y aprobación, 3 historial y versiones.
+   - Exportación a Excel con openpyxl desde la Capa 1 (el PRD la dejaba fuera de alcance, P6; falta actualizar el PRD).
+   - Ruff como linter y formateador.
+   - Roles y responsables (confirmado 2026-10-19): Tesorero, Analista Contable, Jefa de Contabilidad (1er aprobador) y Gerente de Administración y Finanzas (GAF, 2.º y último aprobador, superior de la Jefa); comentan Tesorero, Analista Contable y Jefa; los rechazos del GAF van a la Jefa, los de la Jefa al Analista Contable y ella reabre. La exportación a Excel pasó al alcance (P6, HU-16); PRD, historias e issues alineados (salvo HU-01 y HU-15). ADR-0006.
+
+   **Aprendizajes**
+   - Separar la lógica de Streamlit y poner el ERP detrás de un puerto permite cambiar el respaldo o el adaptador sin tocar el motor.
+ 
+   ## 19-10-2026 | Fase 2: diseño | Tiempo: 21:50 h
+  **Qué corregí / decidí yo**
+  - Validación de las correciones de roles y responsabilidades
+  - Validación de historias de usuario (nueva de exportar excel de conciliación)
+
