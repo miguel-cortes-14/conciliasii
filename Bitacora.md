@@ -49,7 +49,7 @@ Tiempo que habría tomado con un equipo tradicional (completar al terminar cada 
 
    ---
 
-   ## 19-10-2026 | Fase 2: diseño | Tiempo: __ h
+   ## 19-10-2026 | Fase 2: diseño | Tiempo: 15:00 h
 
    **Qué hice**
    - Pedí el diseño de la arquitectura a partir del PRD, las historias y los Issues #3 a #17.
@@ -69,3 +69,9 @@ Tiempo que habría tomado con un equipo tradicional (completar al terminar cada 
 
    **Aprendizajes**
    - Separar la lógica de Streamlit y poner el ERP detrás de un puerto permite cambiar el respaldo o el adaptador sin tocar el motor.
+ 
+   ## 19-10-2026 | Fase 2: diseño | Tiempo: 21:50 h
+  **Qué corregí / decidí yo**
+  - Validación de las correciones de roles y responsabilidades
+  - Validación de historias de usuario (nueva de exportar excel de conciliación)
+
