@@ -1,0 +1,10 @@
+.claude/
+__pycache__/
+.venv/
+.env
+.streamlit/secrets.toml
+.ruff_cache/
+.pytest_cache/
+*.db
+*.sqlite
+*.sqlite3
