@@ -113,6 +113,7 @@ Un documento cuadra solo si la llave y todos sus campos coinciden; cualquier otr
 | RN-09 | Una llave repetida dentro de una misma fuente se marca como alerta de duplicado dentro de su categoría. |
 | RN-10 | Cada nueva ejecución de un período genera una versión nueva y conserva los comentarios por llave. |
 | RN-11 | Aprobación en dos niveles. Estados: Borrador, En revisión contable, Pendiente de la Jefa de Contabilidad, Pendiente del GAF y Aprobado. Se comenta (Tesorero, Analista Contable y Jefa de Contabilidad) mientras el período está en Borrador, En revisión contable o Pendiente de la Jefa. El nivel 1 (Jefa de Contabilidad) exige comentario en toda diferencia; el nivel 2 (GAF) es final. Destinos: el rechazo del GAF vuelve a la Jefa; el rechazo de la Jefa vuelve al Analista Contable; solo el Analista Contable devuelve a Tesorería. La Jefa reabre un período aprobado, sin visto bueno del GAF, lo que habilita una versión nueva. La versión aprobada es inmutable. |
+| RN-12 | Solo se comentan los documentos con diferencia: un documento Cuadrado no admite comentarios. Un comentario cuyo texto está vacío o solo tiene espacios no se guarda y no cuenta para la exigencia de comentario del nivel 1 (RN-11). |
 
 ## Métricas de éxito
 

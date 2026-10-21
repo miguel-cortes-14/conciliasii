@@ -36,7 +36,9 @@ conciliasii/
 │   │   └── bc_api_adapter.py       # stub de la API real (HU-15)
 │   ├── engine/
 │   │   ├── matcher.py              # filtro de universo, llave, cruce, vecinos, duplicados, sugerencias
-│   │   └── classifier.py           # asigna una categoría por documento (RN-05, RN-06)
+│   │   ├── classifier.py           # asigna una categoría por documento (RN-05, RN-06)
+│   │   ├── service.py              # ejecutar_conciliacion y decisiones sobre sugerencias (servicio de aplicación)
+│   │   └── summary.py              # resumen por categoría, detalle y filtros (RF-06, RF-07)
 │   ├── export/
 │   │   └── excel.py                # arma el libro Excel con openpyxl (devuelve bytes)
 │   ├── workflow/
@@ -57,7 +59,7 @@ Reglas de dependencia (de afuera hacia adentro; nunca al revés):
 pages/ , app.py  ->  workflow, engine, ingest, export, erp (puerto), storage (interfaz)  ->  domain
 ```
 
-`domain` no importa nada del proyecto. `engine` no conoce `storage` ni `erp.csv_adapter`: recibe listas de `Documento` ya cargadas. Un servicio de aplicación (función `ejecutar_conciliacion(...)` en `engine/` o `workflow/`, sin Streamlit) orquesta ingest, puerto, matcher, clasificador y repositorio; las páginas solo lo invocan.
+`domain` no importa nada del proyecto. `engine` no conoce `storage` ni `erp.csv_adapter`: recibe listas de `Documento` ya cargadas. Un servicio de aplicación (función `ejecutar_conciliacion(...)` en `engine/service.py`, sin Streamlit) orquesta ingest, puerto, matcher, clasificador y repositorio; las páginas solo lo invocan.
 
 Instalación de dependencias y calidad de código:
 
@@ -243,7 +245,7 @@ Brechas de este contrato frente al PRD (todas **Supuesto**, se cierran con los C
 | `VAT Amount` | IVA |
 | `Amount Incl. VAT` | Total |
 
-Mapeo del adaptador a `Documento` (**Supuesto**, el PRD no define los campos de BC): `Amount Excl. VAT` es `monto_neto` en documentos 33 y `monto_exento` en documentos 34; `VAT Amount` es `monto_iva_recuperable`; `Amount Incl. VAT` es `monto_total`. Así un tipo 34 con IVA distinto de cero en BC queda en Diferencia de monto con el campo "IVA" distinto (HU-05, RN-04). Solo se leen facturas registradas (RN-02); el CSV simulado ya las contiene.
+Mapeo del adaptador a `Documento` (**Supuesto**, el PRD no define los campos de BC): `Amount Excl. VAT` es `monto_neto` en documentos 33 y `monto_exento` en documentos 34; `VAT Amount` es `monto_iva_recuperable`; `Amount Incl. VAT` es `monto_total`; `Entry No.` se guarda como `Documento.nro_movimiento`. Así un tipo 34 con IVA distinto de cero en BC queda en Diferencia de monto con el campo "IVA" distinto (HU-05, RN-04). Solo se leen facturas registradas (RN-02); el CSV simulado ya las contiene.
 
 Si P7 muestra que la API estándar de BC no expone tipo de documento ni folio, `bc_api_adapter` los deriva de `External Document No.` (y el RUT del proveedor desde la ficha). Esa derivación queda encapsulada en `erp/`: el motor sigue recibiendo `Documento` con `rut`, `tipo_doc` y `folio`. Si falta alguno, el documento se informa como "Sin llave" y no participa del cruce (HU-03, HU-15).
 
@@ -512,13 +514,43 @@ Notas de asignación:
 
 | Capa | Módulos y archivos que se entregan |
 | --- | --- |
-| 1 | `app.py`; `pages/1_Cargar_y_Conciliar.py`; `pages/2_Revision.py` (resumen, detalle, sugerencias, descarga); `src/conciliasii/config.py`; `domain/models.py` y `domain/errors.py`; `ingest/sii_csv.py`; `erp/port.py`, `erp/csv_adapter.py`, `erp/bc_api_adapter.py` (stub); `engine/matcher.py`, `engine/classifier.py`; `export/excel.py` (hojas `Resumen`, categorías y `Sugerencias`); `storage/schema.sql` y `storage/repository.py` (`periodo`, `ejecucion`, `resultado`, `sugerencia`); `data/samples/`; `tests/`; `requirements.txt`, `requirements-dev.txt`, `pyproject.toml` |
+| 1 | `app.py`; `pages/1_Cargar_y_Conciliar.py`; `pages/2_Revision.py` (resumen, detalle, sugerencias, descarga); `src/conciliasii/config.py`; `domain/models.py` y `domain/errors.py`; `ingest/sii_csv.py`; `erp/port.py`, `erp/csv_adapter.py`, `erp/bc_api_adapter.py` (stub); `engine/matcher.py`, `engine/classifier.py`, `engine/service.py`, `engine/summary.py`; `export/excel.py` (hojas `Resumen`, categorías y `Sugerencias`); `storage/schema.sql` y `storage/repository.py` (`periodo`, `ejecucion`, `resultado`, `sugerencia`); `data/samples/`; `tests/`; `requirements.txt`, `requirements-dev.txt`, `pyproject.toml` |
 | 2 | `workflow/approval.py`; `pages/3_Aprobacion.py`; panel de comentarios en `pages/2_Revision.py`; tablas `comentario` y `aprobacion` en `schema.sql` y sus métodos en el repositorio; hoja `Comentarios` y columna de comentarios en `export/excel.py`; selector de rol con los roles Analista Contable, Jefa de Contabilidad y GAF, permisos por rol (`Rol`, `RolNoAutorizadoError`) y estados `EnRevisionContable`, `PendienteJefaContabilidad` y `PendienteGAF` |
-| 3 | `pages/4_Historial.py`; en el servicio de conciliación, traspaso de comentarios por llave entre versiones y vista de versiones anteriores en solo lectura (`listar_periodos`, `listar_ejecuciones`); acción "volver a conciliar" con versión nueva |
+| 3 | `pages/4_Historial.py`; en `engine/service.py`, traspaso de comentarios por llave entre versiones y vista de versiones anteriores en solo lectura (`listar_periodos`, `listar_ejecuciones`); acción "volver a conciliar" con versión nueva |
 
 ### Coherencia con el MVP del PRD
 
 El conjunto Must son las historias HU-01 a HU-05, HU-09, HU-10, HU-11, HU-14, HU-15 y HU-16. Con esta asignación, todas caen en las Capas 1 y 2 y ninguna Must queda en la Capa 3. Pero la Capa 1 por sí sola no cumple el MVP mínimo: faltan HU-11 y HU-14 (Capa 2), que son las que reemplazan el cierre con Contabilidad y el GAF. El MVP completo del PRD es Capa 1 + Capa 2; la Capa 3 contiene solo historias Should (HU-12, HU-13). Además la Capa 1 adelanta tres historias no Must (HU-06 Should; HU-07 y HU-08 Could) porque forman parte del motor de cruce,; la descarga de Excel (HU-16) ya es parte del alcance del MVP (P6 resuelta).
+
+## Nomenclatura
+
+Las pruebas de `tests/` se escribieron antes que el código y fijan los nombres públicos de esta sección. Los nombres que el diseño ya traía no cambian; los que son nuevos se marcan con (nuevo).
+
+**Convención**
+
+1. **Dominio en español:** modelos, campos, enums, estados, roles, errores y funciones de negocio (`conciliar`, `aprobar_nivel1`, `listar_*`), con verbos en infinitivo.
+2. **Inglés solo para:** sufijos de patrón (`Port`, `Adapter`, `Repository`); los nombres que este documento ya fijó en inglés (módulos `matcher`, `classifier`, `approval`, `repository`, `excel`; `get_purchase_ledger`; variables `ERP_*`, `AMOUNT_TOLERANCE`, `NEIGHBOR_PERIODS`); y los nombres literales de la fuente externa, confinados a `erp/` e `ingest/` (`posting_date`, `document_date`, `Entry No.`).
+3. **Los módulos se nombran por su rol técnico, en inglés**; su contenido va en español. Los módulos nuevos son `engine/service.py` (`ejecutar_conciliacion` y las decisiones sobre sugerencias) y `engine/summary.py` (resumen y detalle).
+4. **El adaptador traduce:** al construir un `Documento`, `Entry No.` pasa a `nro_movimiento`.
+5. **`Config`:** cada campo es la variable de entorno en minúsculas, sin traducir (`empresa_rut`, `erp_period_date_field`, `amount_tolerance`, `neighbor_periods`). Un parámetro que repite un concepto de `Config` usa el mismo nombre (`CsvLedgerAdapter(ruta, erp_period_date_field=...)`).
+6. **Tipos cerrados:** `Estado` y `Accion` son `StrEnum` con los valores de este documento (`"Borrador"`, `"comentar"`).
+7. **Abreviaturas:** nombres completos en `src/`; `repo`, `erp` y `config` se aceptan en fixtures y parámetros locales de prueba.
+8. **Enums:** miembros en `MAYUSCULAS_SNAKE` en español; el valor es el texto del PRD (`"Diferencia de período"`).
+
+**Funciones públicas fijadas por las pruebas** (todas (nuevo) salvo `ejecutar_conciliacion`, las de `approval` y las del repositorio, cuyo nombre ya estaba en este documento)
+
+| Función | Módulo | Historias |
+| --- | --- | --- |
+| `leer_rcv(contenido, periodo, rut_empresa)`, `normalizar_rut(texto)` | `ingest.sii_csv` | HU-02, 04, 05 |
+| `filtrar_universo(sii, erp)` → `Universo`, `sugerir_calces(resultados)` | `engine.matcher` | HU-03, 04, 07 |
+| `conciliar(sii, erp, periodo, config)` → `Conciliacion` | `engine` | HU-05 a 08 |
+| `ejecutar_conciliacion(repo, erp, docs_sii, periodo, actor, config=)`, `confirmar_sugerencia(...)`, `descartar_sugerencia(...)` | `engine.service` | HU-01, 03, 07, 12, 14 |
+| `resumir(resultados, llaves_comentadas=)`, `campos_del_detalle(resultado)`, `filtrar_detalle(resultados, rut=, sin_comentario=, llaves_comentadas=)` | `engine.summary` | HU-09, 10 |
+| `generar_excel(ejecucion, resultados, sugerencias=, comentarios=, decisiones=)` → `bytes` | `export.excel` | HU-16 |
+| `agregar_comentario(repo, ejecucion_id, llave, actor, texto)`, transiciones `(repo, ejecucion_id, actor, motivo=)`, `acciones_permitidas(rol, estado)` | `workflow.approval` | HU-11, 14, 16 |
+| `listar_decisiones(ejecucion_id)` (lectura de `aprobacion`) | `storage.repository` | HU-14, 16 |
+
+Clases nuevas: `Config`, `Actor`, `Universo`, `Conciliacion`, `Resumen`, `CsvLedgerAdapter`, `BcApiAdapter`.
 
 ## Limitaciones conocidas
 

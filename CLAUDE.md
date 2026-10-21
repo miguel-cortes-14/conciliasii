@@ -8,6 +8,8 @@ ConciliaSII es una PoC que concilia el Registro de Compras (RCV) del SII contra 
 
 Lee en este orden al comenzar a trabajar: `docs/PRD.md` (problema, alcance, reglas de negocio RF-xx/RN-xx, decisiones abiertas P1-P8) → `docs/historias.md` (más de 15 historias de usuario con criterios de aceptación, HU-xx) → `docs/arquitectura.md` (diseño completo) → `docs/adr/` (por qué se tomó cada decisión importante).
 
+Los nombres de módulos, funciones y parámetros siguen la sección "Nomenclatura" de `docs/arquitectura.md`; no se inventan nombres nuevos sin actualizarla antes.
+
 ## Comandos (una vez que exista el código)
 
 ```bash
