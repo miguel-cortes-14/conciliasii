@@ -300,6 +300,17 @@ Escenario: Agregar un comentario
   Entonces el comentario queda asociado al documento
   Y registra mi nombre, mi rol, la fecha y la hora
 
+Escenario: Un documento Cuadrado no se comenta
+  Dado un documento en la categoría "Cuadrado"
+  Cuando intento agregarle un comentario
+  Entonces el comentario no se registra
+  Y no veo la opción de comentar ese documento
+
+Escenario: Un comentario en blanco no se guarda
+  Dado un documento con diferencia
+  Cuando intento guardar un comentario vacío o que solo contiene espacios
+  Entonces el comentario no se registra
+
 Escenario: Varios comentarios en un documento
   Dado un documento que ya tiene un comentario
   Cuando agrego otro
@@ -415,6 +426,12 @@ Escenario: Diferencias sin comentario impiden aprobar el nivel 1
   Cuando la Jefa de Contabilidad intenta aprobar el nivel 1
   Entonces la aprobación se rechaza
   Y veo cuántos documentos faltan por comentar
+
+Escenario: Un comentario en blanco no cuenta para aprobar el nivel 1
+  Dado un documento fuera de "Cuadrado" cuyo único intento de comentario estaba vacío o solo con espacios
+  Cuando la Jefa de Contabilidad intenta aprobar el nivel 1
+  Entonces la aprobación se rechaza
+  Y ese documento figura entre los que faltan por comentar
 
 Escenario: Aprobación final del GAF
   Dado un período en espera del GAF
